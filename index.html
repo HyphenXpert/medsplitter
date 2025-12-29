@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedStudent PDF Splitter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .loader {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6;
+            border-radius: 50%; width: 24px; height: 24px;
+            animation: spin 1s linear infinite; display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold text-gray-800 mb-2 text-center">📚 MedSplitter</h1>
+        <p class="text-gray-500 text-sm text-center mb-6">Safe & Private. Files never leave your device.</p>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">1. Select Textbook (PDF)</label>
+            <input type="file" id="pdfInput" accept="application/pdf" class="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-full file:border-0
+              file:text-sm file:font-semibold
+              file:bg-blue-50 file:text-blue-700
+              hover:file:bg-blue-100" />
+        </div>
+
+        <div class="flex gap-4 mb-6">
+            <div class="w-1/2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Start Page</label>
+                <input type="number" id="startPage" placeholder="340" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div class="w-1/2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">End Page</label>
+                <input type="number" id="endPage" placeholder="350" class="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+        </div>
+
+        <button onclick="splitPdf()" id="splitBtn" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition flex justify-center items-center gap-2">
+            <span>Download Slice</span>
+            <div class="loader" id="loader"></div>
+        </button>
+        
+        <p id="status" class="text-center text-red-500 text-sm mt-3"></p>
+    </div>
+
+    <script>
+        async function splitPdf() {
+            const fileInput = document.getElementById('pdfInput');
+            const startInput = document.getElementById('startPage');
+            const endInput = document.getElementById('endPage');
+            const status = document.getElementById('status');
+            const btn = document.getElementById('splitBtn');
+            const loader = document.getElementById('loader');
+
+            // Validation
+            if (fileInput.files.length === 0) return status.textContent = "Please select a PDF file.";
+            if (!startInput.value || !endInput.value) return status.textContent = "Please enter page numbers.";
+            
+            const startPage = parseInt(startInput.value);
+            const endPage = parseInt(endInput.value);
+
+            if (startPage > endPage) return status.textContent = "Start page cannot be larger than end page.";
+
+            // UI Loading State
+            status.textContent = "";
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            loader.style.display = "block";
+
+            try {
+                // 1. Read the file locally
+                const file = fileInput.files[0];
+                const arrayBuffer = await file.arrayBuffer();
+
+                // 2. Load PDF
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                const totalPages = pdfDoc.getPageCount();
+
+                if (startPage < 1 || endPage > totalPages) {
+                    throw new Error(`Invalid range. Book has ${totalPages} pages.`);
+                }
+
+                // 3. Create new PDF
+                const newPdf = await PDFLib.PDFDocument.create();
+                
+                // Note: PDF pages are 0-indexed in code, but users think 1-indexed
+                // We want pages 340 to 350. This means indices 339 to 349.
+                const pageIndices = [];
+                for (let i = startPage - 1; i < endPage; i++) {
+                    pageIndices.push(i);
+                }
+
+                const copiedPages = await newPdf.copyPages(pdfDoc, pageIndices);
+                copiedPages.forEach((page) => newPdf.addPage(page));
+
+                // 4. Save and Download
+                const pdfBytes = await newPdf.save();
+                const blob = new Blob([pdfBytes], { type: "application/pdf" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `${file.name.replace('.pdf', '')}_pg${startPage}-${endPage}.pdf`;
+                link.click();
+
+            } catch (err) {
+                status.textContent = err.message;
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = "1";
+                loader.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
